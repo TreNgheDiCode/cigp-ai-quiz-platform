@@ -1,28 +1,23 @@
-import { getAuthSession } from "@/lib/next-auth";
-import { NextResponse } from "next/server";
-import { quizCreationSchema } from "@/schemas/form/quiz";
-import { ZodError } from "zod";
 import { prisma } from "@/lib/db";
+import { NextResponse } from "next/server";
+import { z } from "zod";
 import axios from "axios";
+import { getAuthSession } from "@/lib/next-auth";
+import { quizCreationSchema } from "@/schemas/form/quiz";
 
 export async function POST(req: Request, res: Response) {
   try {
     const session = await getAuthSession();
-
     if (!session?.user) {
       return NextResponse.json(
-        {
-          error: "You must be logged in",
-        },
+        { error: "You must be logged in to create a game." },
         {
           status: 401,
         }
       );
     }
-
     const body = await req.json();
-    const { amount, topic, type } = quizCreationSchema.parse(body);
-
+    const { topic, type, amount } = quizCreationSchema.parse(body);
     const game = await prisma.game.create({
       data: {
         gameType: type,
@@ -31,12 +26,29 @@ export async function POST(req: Request, res: Response) {
         topic,
       },
     });
-
-    const { data } = await axios.post("/api/questions", {
-      amount,
-      topic,
-      type,
+    await prisma.topic_count.upsert({
+      where: {
+        topic,
+      },
+      create: {
+        topic,
+        count: 1,
+      },
+      update: {
+        count: {
+          increment: 1,
+        },
+      },
     });
+
+    const { data } = await axios.post(
+      `${process.env.NEXT_PUBLIC_API_URL as string}/api/questions`,
+      {
+        amount,
+        topic,
+        type,
+      }
+    );
 
     if (type === "mcq") {
       type mcqQuestion = {
@@ -46,15 +58,15 @@ export async function POST(req: Request, res: Response) {
         option2: string;
         option3: string;
       };
-      let manyData = data.questions.map((question: mcqQuestion) => {
-        let options = [
-          question.answer,
+
+      const manyData = data.questions.map((question: mcqQuestion) => {
+        // mix up the options lol
+        const options = [
           question.option1,
           question.option2,
           question.option3,
-        ];
-
-        options.sort(() => Math.random() - 0.5);
+          question.answer,
+        ].sort(() => Math.random() - 0.5);
         return {
           question: question.question,
           answer: question.answer,
@@ -63,6 +75,7 @@ export async function POST(req: Request, res: Response) {
           questionType: "mcq",
         };
       });
+
       await prisma.question.createMany({
         data: manyData,
       });
@@ -71,38 +84,90 @@ export async function POST(req: Request, res: Response) {
         question: string;
         answer: string;
       };
-
-      let manyData = data.questions.map((question: openQuestion) => {
-        return {
-          question: question.question,
-          answer: question.answer,
-          gameId: game.id,
-          questionType: "open_ended",
-        };
-      });
       await prisma.question.createMany({
-        data: manyData,
+        data: data.questions.map((question: openQuestion) => {
+          return {
+            question: question.question,
+            answer: question.answer,
+            gameId: game.id,
+            questionType: "open_ended",
+          };
+        }),
       });
     }
 
-    return NextResponse.json({
-      gameId: game.id,
-    });
+    return NextResponse.json({ gameId: game.id }, { status: 200 });
   } catch (error) {
-    if (error instanceof ZodError) {
+    if (error instanceof z.ZodError) {
       return NextResponse.json(
+        { error: error.issues },
         {
-          error: error.issues,
-        },
-        { status: 400 }
+          status: 400,
+        }
+      );
+    } else {
+      console.log(error);
+      return NextResponse.json(
+        { error: "An unexpected error occurred." },
+        {
+          status: 500,
+        }
+      );
+    }
+  }
+}
+export async function GET(req: Request, res: Response) {
+  try {
+    const session = await getAuthSession();
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: "You must be logged in to create a game." },
+        {
+          status: 401,
+        }
+      );
+    }
+    const url = new URL(req.url);
+    const gameId = url.searchParams.get("gameId");
+    if (!gameId) {
+      return NextResponse.json(
+        { error: "You must provide a game id." },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const game = await prisma.game.findUnique({
+      where: {
+        id: gameId,
+      },
+      include: {
+        questions: true,
+      },
+    });
+    if (!game) {
+      return NextResponse.json(
+        { error: "Game not found." },
+        {
+          status: 404,
+        }
       );
     }
 
     return NextResponse.json(
+      { game },
       {
-        error: "Something went wrong",
-      },
-      { status: 500 }
+        status: 400,
+      }
+    );
+  } catch (error) {
+    console.log(error);
+    return NextResponse.json(
+      { error: "Lỗi xảy ra." },
+      {
+        status: 500,
+      }
     );
   }
 }
