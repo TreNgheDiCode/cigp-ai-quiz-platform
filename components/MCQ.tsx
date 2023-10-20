@@ -5,6 +5,7 @@ import { ChevronRight, Timer } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
+import MCQCounter from "./MCQCounter";
 
 type Props = {
   game: Game & { questions: Pick<Question, "id" | "options" | "question">[] };
@@ -28,16 +29,19 @@ const MCQ = ({ game }: Props) => {
   return (
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:w-[80vw] max-w-4xl w-[90vw]">
       <div className="flex flex-row justify-between">
-        <p>
-          <span className="text-slate-400 mr-2">Topic</span>
-          <span className="px-2 py-1 text-white rounded-lg bg-slate-800">
-            {game.topic}
-          </span>
-        </p>
-        <div className="flex self-start mt-3 text-slate-400">
-          <Timer className="mr-2" />
-          <span>00:00</span>
+        <div className="flex flex-col">
+          <p>
+            <span className="text-slate-400 mr-2">Topic</span>
+            <span className="px-2 py-1 text-white rounded-lg bg-slate-800">
+              {game.topic}
+            </span>
+          </p>
+          <div className="flex self-start mt-3 text-slate-400">
+            <Timer className="mr-2" />
+            <span>00:00</span>
+          </div>
         </div>
+        <MCQCounter correctAnswers={3} wrongAnswers={4} />
       </div>
 
       <Card className="w-full mt-4">
@@ -48,7 +52,7 @@ const MCQ = ({ game }: Props) => {
               {game.questions.length}
             </div>
           </CardTitle>
-          <CardDescription className="flex-grow text-lg">
+          <CardDescription className="flex-grow text-lg select-none">
             {currentQuestion.question}
           </CardDescription>
         </CardHeader>
