@@ -13,7 +13,7 @@ import { z } from "zod";
 import { useToast } from "./ui/use-toast";
 import Link from "next/link";
 import { cn, formatTimeDelta } from "@/lib/utils";
-import { checkAnswerSchema } from "@/schemas/questions";
+import { checkAnswerSchema, endGameSchema } from "@/schemas/questions";
 
 type Props = {
   game: Game & { questions: Pick<Question, "id" | "options" | "question">[] };
@@ -58,6 +58,16 @@ const MCQ = ({ game }: Props) => {
     },
   });
 
+  const { mutate: endGame } = useMutation({
+    mutationFn: async () => {
+      const payload: z.infer<typeof endGameSchema> = {
+        gameId: game.id,
+      };
+      const response = await axios.post(`/api/endGame`, payload);
+      return response.data;
+    },
+  });
+
   const handleNext = useCallback(() => {
     if (isChecking) return;
     checkAnswer(undefined, {
@@ -82,6 +92,7 @@ const MCQ = ({ game }: Props) => {
           });
         }
         if (questionIndex === game.questions.length - 1) {
+          endGame();
           setHasEnded(true);
           return;
         }
@@ -89,7 +100,14 @@ const MCQ = ({ game }: Props) => {
         setSelectedChoice(-1);
       },
     });
-  }, [checkAnswer, toast, isChecking, game.questions.length, questionIndex]);
+  }, [
+    checkAnswer,
+    toast,
+    isChecking,
+    game.questions.length,
+    questionIndex,
+    endGame,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

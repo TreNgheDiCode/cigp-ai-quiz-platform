@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Card,
   CardContent,
@@ -26,8 +26,10 @@ import { Button } from "./ui/button";
 import { BookOpen, CopyCheck } from "lucide-react";
 import { Separator } from "./ui/separator";
 import { useMutation } from "@tanstack/react-query";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { useRouter } from "next/navigation";
+import LoadingQuestions from "./LoadingQuestions";
+import { toast } from "./ui/use-toast";
 
 type Props = {};
 
@@ -35,6 +37,8 @@ type Input = z.infer<typeof quizCreationSchema>;
 
 const QuizCreation = (props: Props) => {
   const router = useRouter();
+  const [showLoader, setShowLoader] = useState(false);
+  const [finishedLoading, setFinishedLoading] = useState(false);
   const { mutate: getQuestions, isPending } = useMutation({
     mutationFn: async ({ amount, topic, type }: Input) => {
       const response = await axios.post("/api/game", {
@@ -55,6 +59,7 @@ const QuizCreation = (props: Props) => {
   });
 
   function onSubmit(input: Input) {
+    setShowLoader(true);
     getQuestions(
       {
         amount: input.amount,
@@ -62,7 +67,20 @@ const QuizCreation = (props: Props) => {
         type: input.type,
       },
       {
+        onError: (error) => {
+          setShowLoader(false);
+          if (error instanceof AxiosError) {
+            if (error.response?.status === 500) {
+              toast({
+                title: "Error",
+                description: "Something went wrong. Please try again later.",
+                variant: "destructive",
+              });
+            }
+          }
+        },
         onSuccess: ({ gameId }) => {
+          setFinishedLoading(true);
           if (form.getValues("type") === "open_ended") {
             router.push(`/play/open_ended/${gameId}`);
           } else {
@@ -75,6 +93,9 @@ const QuizCreation = (props: Props) => {
 
   form.watch();
 
+  if (showLoader) {
+    return <LoadingQuestions finished={finishedLoading} />;
+  }
   return (
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
       <Card>
